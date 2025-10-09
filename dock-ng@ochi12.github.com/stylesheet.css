@@ -1,0 +1,8 @@
+/* this will be usable in the future if we support a visual guide for the hot corner*/
+.dock-ng-hot-area {
+  background-color: #3d3d3d;
+  border: 1px;
+  border-color: #4d4d4d;
+  opacity: 0.4;
+  border-radius: 999px;
+}

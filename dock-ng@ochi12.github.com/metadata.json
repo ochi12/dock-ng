@@ -1,0 +1,10 @@
+{
+  "name": "Dock!ng",
+  "description": "Adds lightweight dock support to gnome-shell using native dash plus extra features",
+  "uuid": "dock-ng@ochi12.github.com",
+  "version": 1,
+  "shell-version": [
+    "45", "46", "47", "48"
+  ],
+  "url": "https://github.com/ochi12/dock-ng/"
+}
