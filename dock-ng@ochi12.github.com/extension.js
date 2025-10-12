@@ -19,8 +19,6 @@
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {DockNGManager} from './dockManager.js';
 
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-
 export default class ShelledDesktopIconExtension extends Extension {
     constructor(metadata) {
         super(metadata);
@@ -42,10 +40,6 @@ export default class ShelledDesktopIconExtension extends Extension {
 
     enable() {
         this._addManager();
-
-        Main.layoutManager.connectObject('startup-complete', () => {
-            Main.overview.hide();
-        }, this);
     }
 
     disable() {

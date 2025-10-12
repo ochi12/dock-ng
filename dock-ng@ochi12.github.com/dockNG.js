@@ -3,6 +3,7 @@ import GObject from 'gi://GObject';
 import Clutter from 'gi://Clutter';
 import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
+import St from 'gi://St';
 
 import * as Dash from 'resource:///org/gnome/shell/ui/dash.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -11,9 +12,10 @@ import * as Layout from 'resource:///org/gnome/shell/ui/layout.js';
 const DOCK_MAX_HEIGHT_RATIO = 0.16;
 const DOCK_AUTOHIDE_TIMEOUT = 500; // ms
 
+const DOCK_ANIMATION_TIME = 200; // DASH_ANIMATION_TIME = 200;
+
 const HOT_AREA_TRIGGER_SPEED = 70; // dash to dock has too much pressure treshold
 const HOT_AREA_TRIGGER_TIMEOUT = 550; // prevent spam. A little bit more than DOCK_AUTOHIDE_TIMEOUT
-const BARRIER_SIZE_FACTOR = 0.20; // 20 percent of monitor width
 
 const baseIconSizes = [16, 22, 24, 32, 48, 64]; // copied from upstrean dash.
 
@@ -23,11 +25,13 @@ export const DockNGHotArea = GObject.registerClass({
         'triggered': {},
     },
 }, class DockNGHotArea extends Clutter.Actor {
-    _init(layoutManager, monitor) {
+    _init(layoutManager, monitor, left, bottom) {
         super._init();
 
         this._entered = false;
         this._monitor = monitor;
+        this._left = left;
+        this._bottom = bottom;
 
         this._horizontalBarrier = null;
 
@@ -57,14 +61,12 @@ export const DockNGHotArea = GObject.registerClass({
         if (size === 0)
             return;
 
-        const centerX = this._monitor.width / 2;
-        const bottom =  this._monitor.height;
-        const sideX = (this._monitor.width * BARRIER_SIZE_FACTOR) / 2;
+
 
         this._horizontalBarrier = new Meta.Barrier({
             backend: global.backend,
-            x1: centerX - sideX, x2: centerX + sideX,
-            y1: bottom, y2: bottom,
+            x1: this._left, x2: this._left + this._monitor.width,
+            y1: this._bottom, y2: this._bottom,
             directions: Meta.BarrierDirection.NEGATIVE_Y,
         });
 
@@ -102,24 +104,43 @@ export const DockNGHotArea = GObject.registerClass({
 });
 
 
-export const DockNG = GObject.registerClass(
-class DockNG extends Dash.Dash {
+export const DockNG = GObject.registerClass({
+    Signals: {
+        'target-box-updated': {},
+    },
+}, class DockNG extends Dash.Dash {
     _init(monitorIndex) {
         super._init();
 
         this._addChrome();
 
         this._monitorIndex = monitorIndex;
-        this._monitor = Main.layoutManager.monitors[monitorIndex];
 
         this._workArea = null;
         this._autohide_timeout_id = 0;
         this._menuOpened = false;
+        this._show =  false;
+        this._targetBox = null;
+
+        this._blockAutoHide = false;
 
         global.display.connectObject(
             'workareas-changed', this._updateDockArea.bind(this), this);
+
+        Main.layoutManager.connectObject(
+            'monitors-changed', this._updateDockArea.bind(this), this);
+
         Main.overview.connectObject(
-            'shown', () => this.showDock(false, false),
+            'shown', () => {
+                this.showDock(false, this._monitorIndex !== Main.layoutManager.primaryIndex);
+            },
+            'hidden', () => {
+                if (this._blockAutoHide)
+                    this.showDock(true);
+            },
+            'hiding', () => {
+                this.showDock(false, false);
+            },
             'item-drag-begin', () => {
                 this._draggingItem = true;
             },
@@ -132,43 +153,37 @@ class DockNG extends Dash.Dash {
         this._dashContainer.connectObject('notify::hover',
             this._onHover.bind(this), this);
 
-        this._draggingItem = false;
-
-        this._isIconSizeChanged = false;
-        this._oldIconSize = this.iconSize;
-
-        this.connectObject(
-            'icon-size-changed', () => {
-                // we only monitor icon unpinning here
-                // meaning this._isIconSizeChanged is only true
-                // if icon size grew.
-                this._isIconSizeChanged = this._oldIconSize < this.iconSize;
-                this._oldIconSize = this.iconSize;
-            },
-            this);
-
         this._updateDockArea();
     }
 
+    // override original _redisplay
+    _redisplay() {
+        const oldHeight = this.height;
+        super._redisplay();
 
-    vfunc_allocate(box) {
-        super.vfunc_allocate(box);
+        if (this.height !== oldHeight)
+            this._reposition(oldHeight, this.height);
+    }
 
-        if (!this._isIconSizeChanged)
+    _reposition(oldHeight, newHeight) {
+        if (!this._workArea)
             return;
 
-        if (this._workArea) {
-            const targetY = this._workArea.y + this._workArea.height - this.height;
+        const targetY = this._workArea.y + this._workArea.height - newHeight;
+        this._computeTargetBox(targetY);
 
+        // without this guard the dock might  jump to visible position even tho
+        // it is intentionally hidden
+        if (this._show) {
+            // we will animate to position se we will also animate icon size
+            // this will help the dock grow and shrink pivoted from bottom center
             this.ease({
+                x: this._workArea.x,
                 y: targetY,
-                duration: 200,
+                duration: DOCK_ANIMATION_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
         }
-
-        const oldIconSize = baseIconSizes[Math.max(0, baseIconSizes.indexOf(this.iconSize) - 1)];
-        const scale = oldIconSize / this.iconSize;
 
         let iconChildren = this._box.get_children().filter(actor => {
             return actor.child &&
@@ -177,11 +192,27 @@ class DockNG extends Dash.Dash {
                    !actor.animatingOut;
         });
 
-        iconChildren.push(this._showAppsIcon);
+        if (this._showAppsIcon)
+            iconChildren.push(this._showAppsIcon);
 
-        iconChildren.forEach(child => {
-            const icon = child.child._delegate.icon;
+        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const iconSizes = baseIconSizes.map(s => s * scaleFactor);
 
+        // default for icon size increased
+        let oldIconSize = iconSizes[Math.max(0, iconSizes.indexOf(this.iconSize) - 1)];
+
+        // for icon size decreased
+        if (oldHeight > newHeight)
+            oldIconSize = iconSizes[Math.min(iconSizes.length - 1, iconSizes.indexOf(this.iconSize) + 1)];
+
+        const scale = oldIconSize / this.iconSize;
+        console.log(scale);
+
+        for (let i = 0; i < iconChildren.length; i++) {
+            let icon = iconChildren[i].child._delegate.icon;
+
+            // Set the new size immediately, to keep the icons' sizes
+            // in sync with this.iconSize
             icon.setIconSize(this.iconSize);
 
             let [targetWidth, targetHeight] = icon.icon.get_size();
@@ -195,40 +226,23 @@ class DockNG extends Dash.Dash {
             icon.icon.ease({
                 width: targetWidth,
                 height: targetHeight,
-                duration: 200,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            });
-        });
-
-        if (this._separator) {
-            this._separator.ease({
-                height: this.iconSize,
-                duration: 200,
+                duration: DOCK_ANIMATION_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
         }
 
-        this._isIconSizeChanged = false;
+        if (this._separator) {
+            this._separator.ease({
+                height: this.iconSize,
+                duration: DOCK_ANIMATION_TIME,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        }
     }
 
     _queueRedisplay() {
         if (this._workId)
             Main.queueDeferredWork(this._workId);
-    }
-
-    _onSizeChanged() {
-        if (!this._workArea || Main.overview.visible)
-            return;
-
-        if (!this._isIconSizeChanged)
-            return;
-
-        this._isIconSizeChanged =  false;
-
-        const targetY = this._workArea.y + this._workArea.height - this.height;
-        const targetX = this._workArea.x;
-
-        this.set_position(targetX, targetY);
     }
 
     _addChrome() {
@@ -254,25 +268,41 @@ class DockNG extends Dash.Dash {
         this.set_height(Math.min(maxDockHeight,
             this.get_preferred_height(this.width)));
 
-        this.showDock(true, false);
-        if (!this._dashContainer.get_hover() || Main.overview.visible)
-            this.showDock(false, false);
+        const targetY = this._workArea.y + this._workArea.height - this.height;
+        this._computeTargetBox(targetY);
 
-        if (this.is_visible()) {
-            this.set_position(this._workArea.x,
-                this._workArea.y + this._workArea.height - this.height);
-        } else {
-            this.set_position(this._workArea.x,
-                this._workArea.y + this._workArea.height);
-        }
+        if (this.is_visible())
+            this.set_position(this._workArea.x, targetY);
+        else
+            this.set_position(this._workArea.x, targetY + this.height);
+
+        this.showDock(true, true);
+        // if (!this._dashContainer.get_hover() || Main.overview.visible && !this._blockAutoHide)
+        //    this.showDock(false, false);
     }
 
-    _adjustIconSize() {
-        super._adjustIconSize();
+    _computeTargetBox(targetY) {
+        // y constaints are the only important parseInt
+        // but we will just include it anyways. could be part of settings?
+        const x = this._workArea.x;
+        const width = this._workArea.x + this._workArea.width;
+
+        const y = targetY;
+        const height = this.height;
+
+        this._targetBox = {x, y, width, height};
+        this.emit('target-box-updated');
+    }
+
+    // override original _itemMenuStateChanged
+    _itemMenuStateChanged(item, opened) {
+        super._itemMenuStateChanged(item, opened);
+        this._menuOpened = opened;
+        this._onHover();
     }
 
     _onHover() {
-        if (this._menuOpened && this._dashContainer.get_hover())
+        if (this._menuOpened && this._dashContainer.get_hover() && this._blockAutoHide)
             return;
 
         if (this._autohide_timeout_id > 0) {
@@ -284,7 +314,10 @@ class DockNG extends Dash.Dash {
             GLib.PRIORITY_DEFAULT,
             DOCK_AUTOHIDE_TIMEOUT,
             () => {
-                if (!this._dashContainer.get_hover() && !this._draggingItem && !this._menuOpened) {
+                if (!this._dashContainer.get_hover() &&
+                    !this._draggingItem &&
+                    !this._menuOpened &&
+                    !this._blockAutoHide) {
                     this.showDock(false, true);
 
                     this._autohide_timeout_id = 0;
@@ -295,7 +328,19 @@ class DockNG extends Dash.Dash {
             });
     }
 
+    blockAutoHide(block) {
+        this._blockAutoHide = block;
+        this.showDock(this._blockAutoHide && !Main.overview.visible);
+        this._onHover();
+    }
+
+    get targetBox() {
+        return this._targetBox;
+    }
+
     showDock(show, animate = true) {
+        this._show = show;
+
         if (!this._workArea)
             return;
 
@@ -316,13 +361,6 @@ class DockNG extends Dash.Dash {
         });
     }
 
-    // override original _itemMenuStateChanged
-    _itemMenuStateChanged(item, opened) {
-        super._itemMenuStateChanged(item, opened);
-        this._menuOpened = opened;
-        this._onHover();
-    }
-
     destroy() {
         if (this._autohide_timeout_id > 0) {
             GLib.source_remove(this._autohide_timeout_id);
@@ -330,9 +368,14 @@ class DockNG extends Dash.Dash {
         }
 
         this.disconnectObject(this);
+
         global.display.disconnectObject(this);
+
         Main.overview.disconnectObject(this);
+
         this._dashContainer.disconnectObject(this);
+
+        Main.layoutManager.disconnectObject(this);
 
         this._untrackChrome();
 
