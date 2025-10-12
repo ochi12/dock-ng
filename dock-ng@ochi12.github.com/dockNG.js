@@ -124,6 +124,11 @@ export const DockNG = GObject.registerClass({
 
         this._blockAutoHide = false;
 
+        // let actual dash handle toggle mode
+        // since the only purpose of dock!ng's showAppsButton is to open app grid
+        this.showAppsButton.set_toggle_mode(false);
+        this.showAppsButton.connectObject('clicked', () => Main.overview.showApps(), this);
+
         global.display.connectObject(
             'workareas-changed', this._updateDockArea.bind(this), this);
 
@@ -366,6 +371,8 @@ export const DockNG = GObject.registerClass({
             GLib.source_remove(this._autohide_timeout_id);
             this._autohide_timeout_id = 0;
         }
+
+        this.showAppsButton.disconnectObject(this);
 
         this.disconnectObject(this);
 
