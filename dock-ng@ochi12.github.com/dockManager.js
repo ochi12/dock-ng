@@ -24,20 +24,15 @@ class Intellihide {
 
         this._tracker = Shell.WindowTracker.get_default();
 
-
-        this._onCheckOverlap();
-
         global.display.connectObject(
             'window-entered-monitor', this._onCheckOverlap.bind(this),
-            'window-left-monitor', () => {
-                this._onCheckOverlap.bind(this);
-            },
+            'window-left-monitor', this._onCheckOverlap.bind(this),
             'restacked', this._onCheckOverlap.bind(this),
             'notify::focus-window', this._onCheckOverlap.bind(this),
             this);
 
         Main.layoutManager.connectObject(
-            'monitors-changed', () => this._checkOverlapOnRemainingWindows(), this);
+            'monitors-changed', this._onCheckOverlap.bind(this), this);
 
         this._tracker.connectObject(
             'notify::focus-app', this._onCheckOverlap.bind(this),
@@ -56,18 +51,25 @@ class Intellihide {
 
         const focusApp = this._tracker.focus_app;
         if (!focusApp) {
-            this._status = OverlapStatus.FALSE;
-            this.emit('status-changed');
+            // no focus app might register
+            // e.g. after lock screen or no apps opened
+            this._checkOverlapOnRemainingWindows();
             return;
         }
 
-        const focusWin = focusApp.get_windows().find(w =>
+        let focusWin = focusApp.get_windows().find(w =>
             w.get_monitor() === this._monitorIndex &&
             w.showing_on_its_workspace() &&
             !w.minimized);
 
+        // in the primary monitor, focus win might not exist in the current workspace
+        if (focusWin && this._monitorIndex === Main.layoutManager.primaryIndex) {
+            if (focusWin.get_workspace() !== global.workspace_manager.get_active_workspace())
+                focusWin = null;
+        }
+
         if (!focusWin) {
-            // If we move a focused window from [A] to [B]
+            // If we move a focused window from monitor [A] to [B]
             // we get a null focusWin  because we filtered focusWin for [A]
             // for current monitor only.
             // If some or all other windows in  [A]
@@ -83,49 +85,60 @@ class Intellihide {
             return;
         }
 
-        const winBox = focusWin.get_frame_rect();
+        const overlap = (winBox, targetBox) => this._test(winBox, targetBox);
 
-        this._checkOverlap(winBox, this._targetBox);
+        const winBox = focusWin.get_frame_rect();
+        this._applyOverlapStatus(overlap(winBox, this._targetBox), true);
+
+        console.log(winBox.width, winBox.height);
 
         this._focusActor = focusWin.get_compositor_private();
         this._focusActorId = this._focusActor.connect('notify::allocation',
             () => {
                 const newWinBox = focusWin.get_frame_rect();
-                this._checkOverlap(newWinBox, this._targetBox);
+                this._applyOverlapStatus(overlap(newWinBox, this._targetBox));
             });
     }
 
     _checkOverlapOnRemainingWindows() {
-        const windows = global.get_window_actors()
+        let windows = global.get_window_actors()
         .map(a => a.meta_window)
         .filter(w =>
             w &&                            // window exists
             w.get_monitor() === this._monitorIndex &&  // on this monitor
             !w.minimized &&                     // not minimized (optional)
-            w.showing_on_its_workspace()        // visible on current workspace (important!)
+            w.showing_on_its_workspace()      // visible on current workspace (important!)
         );
 
-        windows.some(win => {
-            const test = win && this._test(win.get_frame_rect(), this._targetBox);
-            if (test) {
-                this._checkOverlap(win.get_frame_rect(), this._targetBox);
-                return true;
-            }
-            return false;
-        });
+        // in the primary monitor, other windows might be present in other workspace
+        // we need filter those
+        if (this._monitorIndex === Main.layoutManager.primaryIndex) {
+            windows = windows.filter(w =>
+                w.get_workspace() === global.workspace_manager.get_active_workspace());
+        }
+
+        if (windows.length === 0)
+            this._applyOverlapStatus(false, true);
+
+        console.log('by not focus');
+
+        const overlap = windows.some(win =>
+            win && this._test(win.get_frame_rect(), this._targetBox));
+
+        this._applyOverlapStatus(overlap);
     }
 
-    _checkOverlap(winBox, targetBox) {
-        const overlap = this._test(winBox, targetBox);
+    _applyOverlapStatus(overlap, forceApply = false) {
+        // forceApply: sometimes we need to spam 'status-changed'
 
         const oldStatus = this._status;
-        if (overlap)
-            this._status = OverlapStatus.TRUE;
-        else
-            this._status = OverlapStatus.FALSE;
+        const newStatus = overlap ? OverlapStatus.TRUE : OverlapStatus.FALSE;
 
-        if (oldStatus !== this._status)
-            this.emit('status-changed');
+        if (!forceApply && oldStatus === newStatus)
+            return;
+
+        this._status = newStatus;
+        this.emit('status-changed');
     }
 
     _test(winBox, targetBox) {
@@ -206,6 +219,13 @@ export class DockNGManager {
             if (!hasNoBottom) {
                 const dockNG = new DockNG(i);
                 const intellihide = new Intellihide(i);
+
+                /* this is necessary or else intellihide will not
+                 * recover immediately after lock screen.
+                 * this works because targetBox is already calculated
+                 * by dockNG on init.
+                 */
+                intellihide.updateTargetBox(dockNG.targetBox);
 
                 const dockNGId = dockNG.connect('target-box-updated', () => {
                     intellihide.updateTargetBox(dockNG.targetBox);
