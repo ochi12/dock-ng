@@ -335,7 +335,11 @@ export const DockNG = GObject.registerClass({
 
     blockAutoHide(block) {
         this._blockAutoHide = block;
-        this.showDock(this._blockAutoHide && !Main.overview.visible);
+        if (!this._dashContainer.get_hover())
+            this.showDock(block && !Main.overview.visible);
+        else
+            this.showDock(!Main.overview.visible);
+
         this._onHover();
     }
 
