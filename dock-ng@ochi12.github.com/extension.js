@@ -15,34 +15,18 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {DockNGManager} from './dockManager.js';
 
 export default class ShelledDesktopIconExtension extends Extension {
-    constructor(metadata) {
-        super(metadata);
-
-        this._manager = null;
+    enable() {
+        this._manager = new DockNGManager(this);
     }
 
-    _addManager() {
-        if (this._manager === null)
-            this._manager = new DockNGManager(this);
-    }
-
-    _removeManager() {
+    disable() {
         if (this._manager) {
             this._manager.destroy();
             this._manager = null;
         }
-    }
-
-    enable() {
-        this._addManager();
-    }
-
-    disable() {
-        this._removeManager();
     }
 }
