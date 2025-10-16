@@ -211,7 +211,6 @@ export const DockNG = GObject.registerClass({
             oldIconSize = iconSizes[Math.min(iconSizes.length - 1, iconSizes.indexOf(this.iconSize) + 1)];
 
         const scale = oldIconSize / this.iconSize;
-        console.log(scale);
 
         for (let i = 0; i < iconChildren.length; i++) {
             let icon = iconChildren[i].child._delegate.icon;
