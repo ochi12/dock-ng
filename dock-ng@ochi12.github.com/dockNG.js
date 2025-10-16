@@ -12,10 +12,10 @@ const DOCK_MAX_HEIGHT_RATIO = 0.16;
 const DOCK_AUTOHIDE_TIMEOUT = 500; // ms
 
 const DOCK_ANIMATION_TIME = 200; // DASH_ANIMATION_TIME = 200;
-const DOCK_VISIBILITY_ANIMATION_TIME = 250;
+const DOCK_VISIBILITY_ANIMATION_TIME = 200;
 const DOCK_HIDE_SCALE = 0.98;
 
-const HOT_AREA_TRIGGER_SPEED = 70; // dash to dock has too much pressure treshold
+const HOT_AREA_TRIGGER_SPEED = 150; // dash to dock has too much pressure treshold
 const HOT_AREA_TRIGGER_TIMEOUT = 550; // prevent spam. A little bit more than DOCK_AUTOHIDE_TIMEOUT
 
 // This class is base on Layout.HotCorner
@@ -334,12 +334,12 @@ export const DockNG = GObject.registerClass({
         this.set_pivot_point(0.5, 1);
 
         this.ease({
-            y: show ? showY : hideY,
-            opacity: show ? 255 : 0,
             scale_x: show ? 1 : DOCK_HIDE_SCALE,
             scale_y: show ? 1 : DOCK_HIDE_SCALE,
-            duration: animate ? DOCK_VISIBILITY_ANIMATION_TIME : 0,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            opacity: show ? 255 : 0,
+            duration: animate ? DOCK_VISIBILITY_ANIMATION_TIME * (show ? 1 : 0.8) : 0,
+            mode: show ? Clutter.AnimationMode.EASE_IN_CUBIC
+                : Clutter.AnimationMode.EASE_OUT_CUBIC,
             onComplete: () => {
                 if (!show) {
                     this.hide();
@@ -347,6 +347,12 @@ export const DockNG = GObject.registerClass({
                     this.set_scale(DOCK_HIDE_SCALE, DOCK_HIDE_SCALE);
                 }
             },
+        });
+
+        this.ease({
+            y: show ? showY : hideY,
+            duration: animate ? DOCK_VISIBILITY_ANIMATION_TIME * (show ? 0.8 : 1) : 0,
+            mode: Clutter.AnimationMode.LINEAR,
         });
     }
 
