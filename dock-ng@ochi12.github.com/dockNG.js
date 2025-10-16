@@ -3,7 +3,6 @@ import GObject from 'gi://GObject';
 import Clutter from 'gi://Clutter';
 import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
-import St from 'gi://St';
 
 import * as Dash from 'resource:///org/gnome/shell/ui/dash.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -13,11 +12,11 @@ const DOCK_MAX_HEIGHT_RATIO = 0.16;
 const DOCK_AUTOHIDE_TIMEOUT = 500; // ms
 
 const DOCK_ANIMATION_TIME = 200; // DASH_ANIMATION_TIME = 200;
+const DOCK_VISIBILITY_ANIMATION_TIME = 250;
+const DOCK_HIDE_SCALE = 0.98;
 
 const HOT_AREA_TRIGGER_SPEED = 70; // dash to dock has too much pressure treshold
 const HOT_AREA_TRIGGER_TIMEOUT = 550; // prevent spam. A little bit more than DOCK_AUTOHIDE_TIMEOUT
-
-const baseIconSizes = [16, 22, 24, 32, 48, 64]; // copied from upstrean dash.
 
 // This class is base on Layout.HotCorner
 export const DockNGHotArea = GObject.registerClass({
@@ -119,7 +118,6 @@ export const DockNG = GObject.registerClass({
         this._workArea = null;
         this._autohide_timeout_id = 0;
         this._menuOpened = false;
-        this._show =  false;
         this._targetBox = null;
 
         this._blockAutoHide = false;
@@ -163,32 +161,19 @@ export const DockNG = GObject.registerClass({
 
     // override original _redisplay
     _redisplay() {
-        const oldHeight = this.height;
+        const oldIconSize = this.iconSize;
         super._redisplay();
 
-        if (this.height !== oldHeight)
-            this._reposition(oldHeight, this.height);
+        if (this.iconSize !== oldIconSize)
+            this._reposition(oldIconSize, this.iconSize);
     }
 
-    _reposition(oldHeight, newHeight) {
+    _reposition(oldIconSize, newIconSize) {
         if (!this._workArea)
             return;
 
-        const targetY = this._workArea.y + this._workArea.height - newHeight;
-        this._computeTargetBox(targetY);
-
-        // without this guard the dock might  jump to visible position even tho
-        // it is intentionally hidden
-        if (this._show) {
-            // we will animate to position se we will also animate icon size
-            // this will help the dock grow and shrink pivoted from bottom center
-            this.ease({
-                x: this._workArea.x,
-                y: targetY,
-                duration: DOCK_ANIMATION_TIME,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            });
-        }
+        if (Main.overview.visible)
+            return;
 
         let iconChildren = this._box.get_children().filter(actor => {
             return actor.child &&
@@ -197,21 +182,7 @@ export const DockNG = GObject.registerClass({
                    !actor.animatingOut;
         });
 
-        if (this._showAppsIcon)
-            iconChildren.push(this._showAppsIcon);
-
-        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-        const iconSizes = baseIconSizes.map(s => s * scaleFactor);
-
-        // default for icon size increased
-        let oldIconSize = iconSizes[Math.max(0, iconSizes.indexOf(this.iconSize) - 1)];
-
-        // for icon size decreased
-        if (oldHeight > newHeight)
-            oldIconSize = iconSizes[Math.min(iconSizes.length - 1, iconSizes.indexOf(this.iconSize) + 1)];
-
-        const scale = oldIconSize / this.iconSize;
-        console.log(scale);
+        const scale = oldIconSize / newIconSize;
 
         for (let i = 0; i < iconChildren.length; i++) {
             let icon = iconChildren[i].child._delegate.icon;
@@ -228,11 +199,18 @@ export const DockNG = GObject.registerClass({
                 icon.icon.width * scale,
                 icon.icon.height * scale);
 
+            const heightId = icon.icon.connect('notify::allocation',
+                () => this._updateDockArea());
+
             icon.icon.ease({
                 width: targetWidth,
                 height: targetHeight,
                 duration: DOCK_ANIMATION_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onComplete: () => {
+                    icon.icon.disconnect(heightId);
+                    this._updateDockArea();
+                },
             });
         }
 
@@ -280,10 +258,6 @@ export const DockNG = GObject.registerClass({
             this.set_position(this._workArea.x, targetY);
         else
             this.set_position(this._workArea.x, targetY + this.height);
-
-        this.showDock(true, true);
-        // if (!this._dashContainer.get_hover() || Main.overview.visible && !this._blockAutoHide)
-        //    this.showDock(false, false);
     }
 
     _computeTargetBox(targetY) {
@@ -348,8 +322,6 @@ export const DockNG = GObject.registerClass({
     }
 
     showDock(show, animate = true) {
-        this._show = show;
-
         if (!this._workArea)
             return;
 
@@ -359,13 +331,21 @@ export const DockNG = GObject.registerClass({
         const hideY = this._workArea.y + this._workArea.height;
         const showY = hideY - this.height;
 
+        this.set_pivot_point(0.5, 1);
+
         this.ease({
             y: show ? showY : hideY,
-            duration: animate ? 250 : /* larger than 0 force proper redraw */ 1,
+            opacity: show ? 255 : 0,
+            scale_x: show ? 1 : DOCK_HIDE_SCALE,
+            scale_y: show ? 1 : DOCK_HIDE_SCALE,
+            duration: animate ? DOCK_VISIBILITY_ANIMATION_TIME : 0,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             onComplete: () => {
-                if (!show)
+                if (!show) {
                     this.hide();
+                    this.opacity = 0;
+                    this.set_scale(DOCK_HIDE_SCALE, DOCK_HIDE_SCALE);
+                }
             },
         });
     }
