@@ -182,6 +182,9 @@ export const DockNG = GObject.registerClass({
                    !actor.animatingOut;
         });
 
+        if (this._showAppsIcon)
+            iconChildren.push(this._showAppsIcon);
+
         const scale = oldIconSize / newIconSize;
 
         for (let i = 0; i < iconChildren.length; i++) {
@@ -229,10 +232,7 @@ export const DockNG = GObject.registerClass({
     }
 
     _addChrome() {
-        Main.layoutManager.addChrome(this, {
-            // affectsStruts: true,
-            trackFullscreen: true,
-        });
+        Main.layoutManager.addTopChrome(this);
     }
 
     _untrackChrome() {

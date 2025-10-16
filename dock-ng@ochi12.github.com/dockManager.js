@@ -1,3 +1,4 @@
+import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -11,6 +12,20 @@ const OverlapStatus = {
     FALSE: 0,
     TRUE: 1,
 };
+
+// List of windows type taken into account.
+// Order is important (keep the original enum order).
+const handledWindowTypes = [
+    Meta.WindowType.NORMAL,
+    Meta.WindowType.DOCK,
+    Meta.WindowType.DIALOG,
+    Meta.WindowType.MODAL_DIALOG,
+    Meta.WindowType.TOOLBAR,
+    Meta.WindowType.MENU,
+    Meta.WindowType.UTILITY,
+    Meta.WindowType.SPLASHSCREEN,
+];
+
 
 class Intellihide {
     constructor(monitorIndex) {
@@ -37,6 +52,9 @@ class Intellihide {
         this._tracker.connectObject(
             'notify::focus-app', this._onCheckOverlap.bind(this),
             this);
+
+        Main.keyboard.connectObject('visibility-changed',
+            this._onKeyboardVisibilityChanged.bind(this), this);
     }
 
     _onCheckOverlap() {
@@ -60,7 +78,8 @@ class Intellihide {
         let focusWin = focusApp.get_windows().find(w =>
             w.get_monitor() === this._monitorIndex &&
             w.showing_on_its_workspace() &&
-            !w.minimized);
+            !w.minimized &&
+            this._isHandledWindow(w));
 
         // in the primary monitor, focus win might not exist in the current workspace
         if (focusWin && this._monitorIndex === Main.layoutManager.primaryIndex) {
@@ -90,8 +109,6 @@ class Intellihide {
         const winBox = focusWin.get_frame_rect();
         this._applyOverlapStatus(overlap(winBox, this._targetBox), true);
 
-        console.log(winBox.width, winBox.height);
-
         this._focusActor = focusWin.get_compositor_private();
         this._focusActorId = this._focusActor.connect('notify::allocation',
             () => {
@@ -104,10 +121,11 @@ class Intellihide {
         let windows = global.get_window_actors()
         .map(a => a.meta_window)
         .filter(w =>
-            w &&                            // window exists
-            w.get_monitor() === this._monitorIndex &&  // on this monitor
-            !w.minimized &&                     // not minimized (optional)
-            w.showing_on_its_workspace()      // visible on current workspace (important!)
+            w &&
+            w.get_monitor() === this._monitorIndex &&
+            !w.minimized &&
+            w.showing_on_its_workspace() &&
+            this._isHandledWindow(w)
         );
 
         // in the primary monitor, other windows might be present in other workspace
@@ -119,8 +137,6 @@ class Intellihide {
 
         if (windows.length === 0)
             this._applyOverlapStatus(false, true);
-
-        console.log('by not focus');
 
         const overlap = windows.some(win =>
             win && this._test(win.get_frame_rect(), this._targetBox));
@@ -141,11 +157,28 @@ class Intellihide {
         this.emit('status-changed');
     }
 
+    _isHandledWindow(win) {
+        // FIXME: We need to specific window types
+        // not all handledWindowTypes are always valid
+        // somethimes we need to ignore specific one.
+
+        return handledWindowTypes.includes(win.get_window_type());
+    }
+
     _test(winBox, targetBox) {
         return !(winBox.x + winBox.width < targetBox.x ||
                  targetBox.x + targetBox.width < winBox.x ||
                  winBox.y + winBox.height < targetBox.y ||
                  targetBox.y + targetBox.height < winBox.y);
+    }
+
+    _onKeyboardVisibilityChanged() {
+        if (Main.keyboard.visible) {
+            this._applyOverlapStatus(true, true);
+        } else {
+            this._applyOverlapStatus(false, true);
+            this._onCheckOverlap();
+        }
     }
 
     get status() {
