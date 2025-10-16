@@ -263,7 +263,7 @@ export class DockNGManager {
                 hotArea.connectObject('triggered',  () => dockNG.showDock(true), this);
                 hotArea.setBarrierSize(barrierSize);
 
-                this._trackedDocks.set(i, {dockNG, dockNGId, intellihide, intellihideId, hotArea});
+                this._trackedDocks.set(i, {dockNG, dockNGId, intellihide, intellihideId});
 
                 Main.layoutManager.hotCorners.push(hotArea);
             } else {
@@ -274,7 +274,7 @@ export class DockNGManager {
 
     _clearDocks() {
         for (const dock of this._trackedDocks.values()) {
-            const {dockNG, dockNGId, intellihide, intellihideId, hotArea} = dock;
+            const {dockNG, dockNGId, intellihide, intellihideId} = dock;
             if (dockNG) {
                 dockNG.disconnect(dockNGId);
                 dockNG.destroy();
@@ -282,11 +282,6 @@ export class DockNGManager {
             if (intellihide) {
                 intellihide.disconnect(intellihideId);
                 intellihide.destroy();
-            }
-
-            if (hotArea) {
-                hotArea.disconnectObject(this);
-                hotArea.destroy();
             }
         }
 
