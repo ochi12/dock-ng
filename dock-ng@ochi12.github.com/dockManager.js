@@ -194,6 +194,7 @@ class Intellihide {
         this._tracker.disconnectObject(this);
         global.display.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
+        Main.keyboard.disconnectObject(this);
 
         if (this._focusActor && this._focusActorId) {
             this._focusActor.disconnect(this._focusActorId);
