@@ -52,6 +52,9 @@ class Intellihide {
         this._tracker.connectObject(
             'notify::focus-app', this._onCheckOverlap.bind(this),
             this);
+
+        Main.keyboard.connectObject('visibility-changed',
+            this._onKeyboardVisibilityChanged.bind(this), this);
     }
 
     _onCheckOverlap() {
@@ -167,6 +170,15 @@ class Intellihide {
                  targetBox.x + targetBox.width < winBox.x ||
                  winBox.y + winBox.height < targetBox.y ||
                  targetBox.y + targetBox.height < winBox.y);
+    }
+
+    _onKeyboardVisibilityChanged() {
+        if (Main.keyboard.visible) {
+            this._applyOverlapStatus(true, true);
+        } else {
+            this._applyOverlapStatus(false, true);
+            this._onCheckOverlap();
+        }
     }
 
     get status() {

@@ -232,10 +232,7 @@ export const DockNG = GObject.registerClass({
     }
 
     _addChrome() {
-        Main.layoutManager.addChrome(this, {
-            // affectsStruts: true,
-            trackFullscreen: true,
-        });
+        Main.layoutManager.addTopChrome(this);
     }
 
     _untrackChrome() {
