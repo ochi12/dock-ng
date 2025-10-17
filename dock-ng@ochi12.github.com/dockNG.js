@@ -60,8 +60,6 @@ export const DockNGHotArea = GObject.registerClass({
         if (size === 0)
             return;
 
-
-
         this._horizontalBarrier = new Meta.Barrier({
             backend: global.backend,
             x1: this._left, x2: this._left + this._monitor.width,
@@ -204,8 +202,13 @@ export const DockNG = GObject.registerClass({
                 icon.icon.width * scale,
                 icon.icon.height * scale);
 
+            // We only allow updating target box once dock
+            // reaches final size. So we set _updateDockArea param
+            // to false. Hover behavior is heavily affected when
+            // target box is updated frequently. This problem originated
+            // from Issue: https://github.com/ochi12/dock-ng/issues/16
             const heightId = icon.icon.connect('notify::allocation',
-                () => this._updateDockArea());
+                () => this._updateDockArea(false));
 
             icon.icon.ease({
                 width: targetWidth,
@@ -214,7 +217,16 @@ export const DockNG = GObject.registerClass({
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onComplete: () => {
                     icon.icon.disconnect(heightId);
-                    this._updateDockArea();
+                    // Delay target box calculation.
+                    // Since target box is updated, users might
+                    // not have the chance to cancel hide through hover if
+                    // there is a current overlap since blockAutoHide will
+                    // do an immediate dock hide.
+                    GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+                        DOCK_VISIBILITY_ANIMATION_TIME, () => {
+                            this._updateDockArea();
+                            return GLib.SOURCE_REMOVE;
+                        });
                 },
             });
         }
@@ -241,7 +253,7 @@ export const DockNG = GObject.registerClass({
         Main.layoutManager.untrackChrome(this);
     }
 
-    _updateDockArea() {
+    _updateDockArea(computeTargetBox = true) {
         this._workArea = Main.layoutManager.getWorkAreaForMonitor(this._monitorIndex);
         if (!this._workArea)
             return;
@@ -254,7 +266,9 @@ export const DockNG = GObject.registerClass({
             this.get_preferred_height(this.width)));
 
         const targetY = this._workArea.y + this._workArea.height - this.height;
-        this._computeTargetBox(targetY);
+
+        if (computeTargetBox)
+            this._computeTargetBox(targetY);
 
         if (this.is_visible())
             this.set_position(this._workArea.x, targetY);
@@ -286,17 +300,18 @@ export const DockNG = GObject.registerClass({
         if (this._autohideTimeoutId)
             GLib.source_remove(this._autohideTimeoutId);
 
+
         this._autohideTimeoutId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT,
             DOCK_AUTOHIDE_TIMEOUT,
             () => {
-                if (this._blockAutoHide)
-                    return GLib.SOURCE_CONTINUE;
                 if (this._dashContainer.get_hover())
                     return GLib.SOURCE_CONTINUE;
                 if (this._draggingItem)
                     return GLib.SOURCE_CONTINUE;
                 if (this._menuOpened)
+                    return GLib.SOURCE_CONTINUE;
+                if (this._blockAutoHide)
                     return GLib.SOURCE_CONTINUE;
 
                 this.showDock(false, true);
