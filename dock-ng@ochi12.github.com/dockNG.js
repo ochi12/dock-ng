@@ -115,6 +115,7 @@ export const DockNG = GObject.registerClass({
 
         this._workArea = null;
         this._autohideTimeoutId = 0;
+        this._delayUpdateDockAreaId = 0;
         this._menuOpened = false;
         this._targetBox = null;
 
@@ -222,9 +223,13 @@ export const DockNG = GObject.registerClass({
                     // not have the chance to cancel hide through hover if
                     // there is a current overlap since blockAutoHide will
                     // do an immediate dock hide.
-                    GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+                    if (this._delayUpdateDockAreaId)
+                        GLib.source_remove(this._delayUpdateDockAreaId);
+
+                    this._delayUpdateDockAreaId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
                         DOCK_VISIBILITY_ANIMATION_TIME, () => {
                             this._updateDockArea();
+                            this._delayUpdateDockAreaId = 0;
                             return GLib.SOURCE_REMOVE;
                         });
                 },
@@ -374,6 +379,11 @@ export const DockNG = GObject.registerClass({
             GLib.source_remove(this._autohideTimeoutId);
             this._autohideTimeoutId = 0;
         }
+
+        if (this._delayUpdateDockAreaId > 0) {
+            GLib.source_remove(this._delayUpdateDockAreaId);
+            this._delayUpdateDockAreaId = 0;
+        } 
 
         this.showAppsButton.disconnectObject(this);
 
