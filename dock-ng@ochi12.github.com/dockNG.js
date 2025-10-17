@@ -116,7 +116,7 @@ export const DockNG = GObject.registerClass({
         this._monitorIndex = monitorIndex;
 
         this._workArea = null;
-        this._autohide_timeout_id = 0;
+        this._autohideTimeoutId = 0;
         this._menuOpened = false;
         this._targetBox = null;
 
@@ -146,9 +146,11 @@ export const DockNG = GObject.registerClass({
             },
             'item-drag-begin', () => {
                 this._draggingItem = true;
+                this._onHover();
             },
             'item-drag-end', () => {
                 this._draggingItem = false;
+                this._onHover();
             }, this);
 
         this._dashContainer.set_track_hover(true);
@@ -281,29 +283,25 @@ export const DockNG = GObject.registerClass({
     }
 
     _onHover() {
-        if (this._menuOpened && this._dashContainer.get_hover() && this._blockAutoHide)
-            return;
+        if (this._autohideTimeoutId)
+            GLib.source_remove(this._autohideTimeoutId);
 
-        if (this._autohide_timeout_id > 0) {
-            GLib.source_remove(this._autohide_timeout_id);
-            this._autohide_timeout_id = 0;
-        }
-
-        this._autohide_timeout_id = GLib.timeout_add(
+        this._autohideTimeoutId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT,
             DOCK_AUTOHIDE_TIMEOUT,
             () => {
-                if (!this._dashContainer.get_hover() &&
-                    !this._draggingItem &&
-                    !this._menuOpened &&
-                    !this._blockAutoHide) {
-                    this.showDock(false, true);
+                if (this._blockAutoHide)
+                    return GLib.SOURCE_CONTINUE;
+                if (this._dashContainer.get_hover())
+                    return GLib.SOURCE_CONTINUE;
+                if (this._draggingItem)
+                    return GLib.SOURCE_CONTINUE;
+                if (this._menuOpened)
+                    return GLib.SOURCE_CONTINUE;
 
-                    this._autohide_timeout_id = 0;
-                    return GLib.SOURCE_REMOVE;
-                }
-
-                return GLib.SOURCE_CONTINUE;
+                this.showDock(false, true);
+                this._autohideTimeoutId = 0;
+                return GLib.SOURCE_REMOVE;
             });
     }
 
@@ -357,9 +355,9 @@ export const DockNG = GObject.registerClass({
     }
 
     destroy() {
-        if (this._autohide_timeout_id > 0) {
-            GLib.source_remove(this._autohide_timeout_id);
-            this._autohide_timeout_id = 0;
+        if (this._autohideTimeoutId > 0) {
+            GLib.source_remove(this._autohideTimeoutId);
+            this._autohideTimeoutId = 0;
         }
 
         this.showAppsButton.disconnectObject(this);
