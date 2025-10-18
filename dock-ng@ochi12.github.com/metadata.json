@@ -3,7 +3,7 @@
   "description": "A lightweight non-fixed dock support for GNOME Shell using the native dash with simple but adaptive intellihide",
   "uuid": "dock-ng@ochi12.github.com",
   "version": 4,
-  "version-name": "v1.0.1",
+  "version-name": "v1.0.2",
   "shell-version": [
     "45", "46", "47", "48", "49"
   ],

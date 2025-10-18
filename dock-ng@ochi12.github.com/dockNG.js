@@ -417,7 +417,7 @@ export const DockNG = GObject.registerClass({
         if (this._delayUpdateDockAreaId > 0) {
             GLib.source_remove(this._delayUpdateDockAreaId);
             this._delayUpdateDockAreaId = 0;
-        } 
+        }
 
         this.showAppsButton.disconnectObject(this);
 
