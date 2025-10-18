@@ -1,4 +1,5 @@
 /* extension.js
+ * Copyright (C) 2025 ochi12
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,6 +16,7 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {DockNGManager} from './dockManager.js';
 
