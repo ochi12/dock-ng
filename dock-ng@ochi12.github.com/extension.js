@@ -18,7 +18,7 @@
  */
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
-import {DockNGManager} from './dockManager.js';
+import {DockNGManager} from './src/dockManager.js';
 
 export default class ShelledDesktopIconExtension extends Extension {
     enable() {

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <template class="PrefsPage" parent="AdwPreferencesPage">
+    <property name="title">DOCK!NG</property>
+
+    <child>
+      <object class="AdwPreferencesGroup" id="appearance_group">
+        <property name="title">Custom appearance</property>
+        <property name="header-suffix">
+          <object class="GtkSwitch" id="appearance_switch">
+            <signal name="notify::active" handler="_onAppearanceSwitchToggled" swapped="no"/>
+            <property name="active">false</property>
+            <property name="hexpand">false</property>
+            <property name="valign">center</property>
+          </object>
+        </property>
+
+        <child>
+          <object class="AdwActionRow" id="color_row">
+            <property name="title">Change the dock color</property>
+            <child type="suffix">
+              <object class="GtkColorDialogButton" id="color_button">
+                <signal name="notify::rgba" handler="_onColorChanged"/>
+                <property name="hexpand">false</property>
+                <property name="valign">center</property>
+                <property name="dialog">
+                  <object class="GtkColorDialog" id="color_dialog">
+                    <property name="title"></property>
+                    <property name="with-alpha">false</property>
+                    <property name="modal">true</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child type="suffix">
+              <object class="GtkSwitch" id="color_switch">
+                <signal name="notify::active" handler="_onColorSwitchToggled" swapped="no"/>
+                <property name="hexpand">false</property>
+                <property name="valign">center</property>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <child>
+          <object class="AdwPreferencesRow" id="opacity_row">
+            <child>
+              <object class="GtkBox" id="opacity_box">
+                <property name="orientation">horizontal</property>
+                <property name="spacing">24</property>
+                <property name="margin-top">12</property>
+                <property name="margin-bottom">12</property>
+                <property name="margin-start">12</property>
+                <property name="margin-end">12</property>
+                <child>
+                  <object class="GtkLabel" id="opacity_label">
+                    <property name="label">Change dock transparency</property>
+                    <property name="halign">start</property>
+                    <property name="valign">center</property>
+                  </object>
+                </child>
+
+                <child>
+                  <object class="GtkScale" id="opacity_slider">
+                    <property name="orientation">horizontal</property>
+                    <property name="digits">2</property>
+                    <property name="hexpand">true</property>
+                    <property name="valign">center</property>
+                    <property name="halign">fill</property>
+      
+                    <property name="adjustment">
+                      <object class="GtkAdjustment" id="opacity_adjustment">
+                        <signal name="value-changed" handler="_onOpacityChanged"/>
+                        <property name="lower">0</property>
+                        <property name="upper">255</property>
+                        <property name="step-increment">1</property>
+                        <property name="page-increment">1</property>
+                        <property name="value">255</property>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+
+      </object>
+    </child>
+
+  </template>
+</interface>
