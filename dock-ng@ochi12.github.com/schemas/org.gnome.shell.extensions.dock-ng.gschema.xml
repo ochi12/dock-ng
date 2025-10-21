@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.dock-ng" path="/org/gnome/shell/extensions/dock-ng/">
+    <key name="custom-appearance-enabled" type="b">
+      <default>false</default>
+    </key>
+    <key name="custom-color-enabled" type="b">
+      <default>false</default>
+    </key>
+    <key name="background-color" type="an">
+      <default>[0, 0, 0, 255]</default>
+    </key>
+  </schema>
+</schemalist>
