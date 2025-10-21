@@ -302,7 +302,11 @@ export class DockNGManager {
                 });
 
                 const hotArea = new DockNGHotArea(Main.layoutManager, monitor, left, bottom);
-                hotArea.connectObject('triggered',  () => dockNG.show(true), this);
+                hotArea.connectObject('triggered',
+                    () => {
+                        dockNG.showDock(true);
+                        dockNG.ensureAutoHide();
+                    }, this);
                 hotArea.setBarrierSize(barrierSize);
 
                 this._trackedDocks.set(i, {dockNG, dockNGId, intellihide, intellihideId});

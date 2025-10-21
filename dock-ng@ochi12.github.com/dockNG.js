@@ -151,6 +151,7 @@ export const DockNG = GObject.registerClass({
 
         this._workArea = null;
         this._autohideTimeoutId = 0;
+        this._delayEnsureAutoHideId = 0;
         this._delayUpdateDockAreaId = 0;
         this._menuOpened = false;
         this._targetBox = null;
@@ -376,6 +377,22 @@ export const DockNG = GObject.registerClass({
         return this._targetBox;
     }
 
+    ensureAutoHide() {
+        // Fix for issue: https://github.com/ochi12/dock-ng/issues/19
+
+        // delay trigger to ensure that dock is at final reveal position
+        // using same delay count same to animation time of reveal AnimationMode
+        if (this._delayEnsureAutoHideId)
+            GLib.source_remove(this._delayEnsureAutoHideId);
+
+        this._delayEnsureAutoHideId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+            DOCK_VISIBILITY_ANIMATION_TIME, () => {
+                this._onHover();
+                this._delayEnsureAutoHideId = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+    }
+
     _shown() {
         return this.visible &&
                this.translation_y === 0 &&
@@ -467,6 +484,12 @@ export const DockNG = GObject.registerClass({
             GLib.source_remove(this._delayUpdateDockAreaId);
             this._delayUpdateDockAreaId = 0;
         }
+
+        if (this._delayEnsureAutoHideId > 0) {
+            GLib.source_remove(this._delayEnsureAutoHideId);
+            this._delayEnsureAutoHideId = 0;
+        }
+
 
         this.showAppsButton.disconnectObject(this);
 
