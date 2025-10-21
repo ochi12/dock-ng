@@ -210,9 +210,6 @@ export const DockNG = GObject.registerClass({
         if (!this._workArea)
             return;
 
-        if (Main.overview.visible)
-            return;
-
         let iconChildren = this._box.get_children().filter(actor => {
             return actor.child &&
                    actor.child._delegate &&
@@ -225,6 +222,14 @@ export const DockNG = GObject.registerClass({
 
         const scale = oldIconSize / newIconSize;
 
+        // MAINTAINERS: do not add translation_y check here
+        // because icon size change changes y position
+        // this variable might register as false even if it is not
+        // and might result to dock not animating icon size change
+        // when visible.
+        // discussed in #24 sub issue: https://github.com/ochi12/dock-ng/issues/25
+        const showing = this.visible && this.opacity > 0;
+
         for (let i = 0; i < iconChildren.length; i++) {
             let icon = iconChildren[i].child._delegate.icon;
 
@@ -233,6 +238,13 @@ export const DockNG = GObject.registerClass({
             icon.setIconSize(this.iconSize);
 
             let [targetWidth, targetHeight] = icon.icon.get_size();
+
+            // Fix for issue: https://github.com/ochi12/dock-ng/issues/24
+            if (!showing) {
+                icon.icon.set_size(targetWidth, targetHeight);
+                this._updateDockArea(false);
+                continue;
+            }
 
             // Scale the icon's texture to the previous size and
             // tween to the new size
