@@ -52,6 +52,8 @@ const DOCK_HIDE_SCALE = 0.98;
 const HOT_AREA_TRIGGER_SPEED = 150; // dash to dock has too much pressure treshold
 const HOT_AREA_TRIGGER_TIMEOUT = 550; // prevent spam. A little bit more than DOCK_AUTOHIDE_TIMEOUT
 
+const MINIMUM_PROPERTY_EASE_DURATION_FACTOR = 0.8;
+
 // This class is base on Layout.HotCorner
 export const DockNGHotArea = GObject.registerClass({
     Signals: {
@@ -169,14 +171,14 @@ export const DockNG = GObject.registerClass({
 
         Main.overview.connectObject(
             'shown', () => {
-                this.showDock(false, this._monitorIndex !== Main.layoutManager.primaryIndex);
+                this.hide(this._monitorIndex !== Main.layoutManager.primaryIndex);
             },
             'hidden', () => {
                 if (this._blockAutoHide)
-                    this.showDock(true);
+                    this.show(true);
             },
             'hiding', () => {
-                this.showDock(false, false);
+                this.hide(false);
             },
             'item-drag-begin', () => {
                 this._draggingItem = true;
@@ -252,7 +254,8 @@ export const DockNG = GObject.registerClass({
                 duration: DOCK_ANIMATION_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onComplete: () => {
-                    icon.icon.disconnect(heightId);
+                    if (heightId)
+                        icon.icon.disconnect(heightId);
                     // Delay target box calculation.
                     // Since target box is updated, users might
                     // not have the chance to cancel hide through hover if
@@ -306,14 +309,10 @@ export const DockNG = GObject.registerClass({
             this.get_preferred_height(this.width)));
 
         const targetY = this._workArea.y + this._workArea.height - this.height;
+        this.set_position(this._workArea.x, targetY);
 
         if (computeTargetBox)
             this._computeTargetBox(targetY);
-
-        if (this.is_visible())
-            this.set_position(this._workArea.x, targetY);
-        else
-            this.set_position(this._workArea.x, targetY + this.height);
     }
 
     _computeTargetBox(targetY) {
@@ -354,7 +353,7 @@ export const DockNG = GObject.registerClass({
                 if (this._blockAutoHide)
                     return GLib.SOURCE_CONTINUE;
 
-                this.showDock(false, true);
+                this.hide(true);
                 this._autohideTimeoutId = 0;
                 return GLib.SOURCE_REMOVE;
             });
@@ -362,10 +361,14 @@ export const DockNG = GObject.registerClass({
 
     blockAutoHide(block) {
         this._blockAutoHide = block;
-        if (!this._dashContainer.get_hover())
-            this.showDock(block && !Main.overview.visible);
+
+        const shouldShow = !Main.overview.visible;
+        const isHovered = this._dashContainer.get_hover();
+
+        if (isHovered || (block && shouldShow))
+            this.show(true);
         else
-            this.showDock(!Main.overview.visible);
+            this.hide(true);
 
         this._onHover();
     }
@@ -390,37 +393,83 @@ export const DockNG = GObject.registerClass({
             });
     }
 
-    showDock(show, animate = true) {
-        if (!this._workArea)
+    _shown() {
+        return this.visible &&
+               this.translation_y === 0 &&
+               this.scale_x === 1 &&
+               this.scale_y === 1 &&
+               this.opacity === 255;
+    }
+
+    _hidden() {
+        return !this.visible &&
+               this.translation_y === this.height &&
+               this.scale_x === DOCK_HIDE_SCALE &&
+               this.scale_y === DOCK_HIDE_SCALE &&
+               this.opacity === 0;
+    }
+
+    show(animate = true) {
+        if (this._shown())
             return;
 
-        if (show)
-            this.show();
+        super.show();
 
-        const hideY = this._workArea.y + this._workArea.height;
-        const showY = hideY - this.height;
-
+        this.remove_all_transitions();
         this.set_pivot_point(0.5, 1);
 
+        if (!animate) {
+            this.translation_y = 0;
+            this.opacity = 255;
+            this.set_scale(1, 1);
+            return;
+        }
+
         this.ease({
-            scale_x: show ? 1 : DOCK_HIDE_SCALE,
-            scale_y: show ? 1 : DOCK_HIDE_SCALE,
-            opacity: show ? 255 : 0,
-            duration: animate ? DOCK_VISIBILITY_ANIMATION_TIME * (show ? 1 : 0.8) : 0,
-            mode: show ? Clutter.AnimationMode.EASE_IN_CUBIC
-                : Clutter.AnimationMode.EASE_OUT_CUBIC,
+            opacity: 255,
+            scale_x: 1,
+            scale_y: 1,
+            duration: DOCK_VISIBILITY_ANIMATION_TIME,
+            mode: Clutter.AnimationMode.EASE_IN_CUBIC,
+        });
+
+        this.ease_property('translation-y', 0, {
+            duration: DOCK_VISIBILITY_ANIMATION_TIME * MINIMUM_PROPERTY_EASE_DURATION_FACTOR,
+            mode: Clutter.AnimationMode.LINEAR,
+        });
+    }
+
+    hide(animate = true) {
+        if (this._hidden())
+            return;
+
+        this.remove_all_transitions();
+        this.set_pivot_point(0.5, 1);
+
+        if (!animate) {
+            this.translation_y = this.height;
+            this.opacity = 0;
+            this.set_scale(DOCK_HIDE_SCALE, DOCK_HIDE_SCALE);
+            super.hide();
+            return;
+        }
+
+        this.ease({
+            opacity: 0,
+            scale_x: DOCK_HIDE_SCALE,
+            scale_y: DOCK_HIDE_SCALE,
+            duration: DOCK_VISIBILITY_ANIMATION_TIME * MINIMUM_PROPERTY_EASE_DURATION_FACTOR,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
             onComplete: () => {
-                if (!show) {
-                    this.hide();
-                    this.opacity = 0;
-                    this.set_scale(DOCK_HIDE_SCALE, DOCK_HIDE_SCALE);
-                }
+                super.hide();
+                this.translation_y = this.height;
+                this.set_scale(DOCK_HIDE_SCALE, DOCK_HIDE_SCALE);
+                this.opacity = 0;
             },
         });
 
-        this.ease({
-            y: show ? showY : hideY,
-            duration: animate ? DOCK_VISIBILITY_ANIMATION_TIME * (show ? 0.8 : 1) : 0,
+        this.ease_property('translation-y', this.height, {
+            duration: DOCK_VISIBILITY_ANIMATION_TIME,
             mode: Clutter.AnimationMode.LINEAR,
         });
     }
