@@ -28,6 +28,10 @@
  * behavior, and implementation, the early concepts from dock-from-dash
  * influenced the beginning of this project, and credit is given in
  * accordance with good open-source practice.
+ *
+ * -------------------------------------------------------------------------
+ * Some parts are also taken from the internal code of gnome-shell
+ * since some are not export like OverviewShownState enum from overview.js
  * -------------------------------------------------------------------------
  */
 
@@ -53,6 +57,13 @@ const HOT_AREA_TRIGGER_SPEED = 150; // dash to dock has too much pressure tresho
 const HOT_AREA_TRIGGER_TIMEOUT = 550; // prevent spam. A little bit more than DOCK_AUTOHIDE_TIMEOUT
 
 const MINIMUM_PROPERTY_EASE_DURATION_FACTOR = 0.8;
+
+const OverviewShownState = {
+    HIDDEN: 'HIDDEN',
+    HIDING: 'HIDING',
+    SHOWING: 'SHOWING',
+    SHOWN: 'SHOWN',
+};
 
 // This class is base on Layout.HotCorner
 export const DockNGHotArea = GObject.registerClass({
@@ -174,11 +185,20 @@ export const DockNG = GObject.registerClass({
                 this.hide(this._monitorIndex !== Main.layoutManager.primaryIndex);
             },
             'hidden', () => {
-                if (this._blockAutoHide)
-                    this.show(true);
+                this.show(false);
+                // force autohide reset timeout so that users have time
+                // to cancel autohide before it fires.
+                this._onHover();
             },
             'hiding', () => {
-                this.hide(false);
+                // update target box base on Main.overview.dash height;
+                // since we are inside overview and dash is the one visible
+                // meaning target box is ensured
+                this._computeTargetBox(
+                    this._workArea.y +
+                    this._workArea.height -
+                    Main.overview.dash.height);
+                this.show(false);
             },
             'item-drag-begin', () => {
                 this._draggingItem = true;
@@ -240,7 +260,7 @@ export const DockNG = GObject.registerClass({
             let [targetWidth, targetHeight] = icon.icon.get_size();
 
             // Fix for issue: https://github.com/ochi12/dock-ng/issues/24
-            if (!showing) {
+            if (!showing || Main.overview._shownState === OverviewShownState.HIDING) {
                 icon.icon.set_size(targetWidth, targetHeight);
                 this._updateDockArea(false);
                 continue;
@@ -373,6 +393,12 @@ export const DockNG = GObject.registerClass({
 
     blockAutoHide(block) {
         this._blockAutoHide = block;
+
+        // return immediately if overview is hiding
+        // letting post blockAutoHide operations run
+        // might cause a slight frame glitch
+        if (Main.overview._shownState === OverviewShownState.HIDING)
+            return;
 
         const shouldShow = !Main.overview.visible;
         const isHovered = this._dashContainer.get_hover();
