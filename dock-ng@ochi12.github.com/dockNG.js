@@ -340,7 +340,9 @@ export const DockNG = GObject.registerClass({
         this.set_height(Math.min(maxDockHeight,
             this.get_preferred_height(this.width)));
 
-        const targetY = this._workArea.y + this._workArea.height - this.height;
+        const targetY = this._workArea.y + this._workArea.height -
+            (Main.overview.visible ? Main.overview.dash.height : this.height);
+
         this.set_position(this._workArea.x, targetY);
 
         if (computeTargetBox)
