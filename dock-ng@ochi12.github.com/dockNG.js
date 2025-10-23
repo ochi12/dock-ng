@@ -161,9 +161,14 @@ export const DockNG = GObject.registerClass({
         this._monitorIndex = monitorIndex;
 
         this._workArea = null;
+
+        // FIXME: manage idle and timeouts
+        // in a map to prevent this mess
         this._autohideTimeoutId = 0;
         this._delayEnsureAutoHideId = 0;
         this._delayUpdateDockAreaId = 0;
+        this._idleHideId = 0;
+
         this._menuOpened = false;
         this._targetBox = null;
 
@@ -399,16 +404,26 @@ export const DockNG = GObject.registerClass({
         // return immediately if overview is hiding
         // letting post blockAutoHide operations run
         // might cause a slight frame glitch
-        if (Main.overview._shownState === OverviewShownState.HIDING)
+        if (Main.overview._shownState === OverviewShownState.HIDING) {
+            this.show(false);
             return;
+        }
 
-        const shouldShow = !Main.overview.visible;
-        const isHovered = this._dashContainer.get_hover();
+        const shouldShow = block && !Main.overview.visible;
 
-        if (isHovered || (block && shouldShow))
+        if (shouldShow) {
             this.show(true);
-        else
-            this.hide(true);
+        } else {
+            if (this._idleHideId)
+                GLib.source_remove(this._idleHideId);
+
+            this._idleHideId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                if (!this._dashContainer.get_hover())
+                    this.hide(true);
+                this._idleHideId = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
 
         this._onHover();
     }
@@ -530,6 +545,10 @@ export const DockNG = GObject.registerClass({
             this._delayEnsureAutoHideId = 0;
         }
 
+        if (this._idleHideId > 0) {
+            GLib.source_remove(this._idleHideId);
+            this._idleHideId = 0;
+        }
 
         this.showAppsButton.disconnectObject(this);
 
