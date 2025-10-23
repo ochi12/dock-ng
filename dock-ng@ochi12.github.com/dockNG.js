@@ -409,7 +409,7 @@ export const DockNG = GObject.registerClass({
             return;
         }
 
-        const shouldShow = block && !Main.overview.visible;
+        const shouldShow = this._blockAutoHide && !Main.overview.visible;
 
         if (shouldShow) {
             this.show(true);
@@ -418,8 +418,14 @@ export const DockNG = GObject.registerClass({
                 GLib.source_remove(this._idleHideId);
 
             this._idleHideId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-                if (!this._dashContainer.get_hover())
+                // reevalute guards since we are executing it inside an idle
+                // without this guard, dock might give off a weird blink
+                // when leaving overview by picking a new window from window picker
+                if (!this._dashContainer.get_hover() &&
+                    !this._blockAutoHide &&
+                    !Main.overview.visible)
                     this.hide(true);
+
                 this._idleHideId = 0;
                 return GLib.SOURCE_REMOVE;
             });
