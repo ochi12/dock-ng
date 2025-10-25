@@ -181,7 +181,7 @@ export const DockNG = GObject.registerClass({
                 });
             },
             'hiding', () => {
-                this.hide(false);
+                this.show(false);
             },
             'item-drag-begin', () => {
                 this._draggingItem = true;
