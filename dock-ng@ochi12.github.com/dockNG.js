@@ -421,11 +421,24 @@ export const DockNG = GObject.registerClass({
                this.opacity === 0;
     }
 
+    _isValidY() {
+        if (this.y + this.height < this._workArea.y + this._workArea.height)
+            return [false, (this._workArea.y + this._workArea.height) - (this.y + this.height)];
+        else if (this.y + this.height > this._workArea.y + this._workArea.height)
+            return [false, -(-this._workArea.y + this._workArea.height) + (this.y + this.height)];
+
+        return [true, 0];
+    }
+
     show(animate = true) {
         if (this._shown())
             return;
 
         super.show();
+
+        const [validY, correctionOffset] = this._isValidY();
+        if (!validY)
+            this.y += correctionOffset;
 
         this.remove_all_transitions();
         this.set_pivot_point(0.5, 1);
