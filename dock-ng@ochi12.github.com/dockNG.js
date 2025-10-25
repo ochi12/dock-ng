@@ -153,6 +153,7 @@ export const DockNG = GObject.registerClass({
         this._autohideTimeoutId = 0;
         this._delayEnsureAutoHideId = 0;
         this._delayUpdateDockAreaId = 0;
+        this._blockAutoHideDelayId = 0;
         this._menuOpened = false;
         this._targetBox = null;
 
@@ -374,13 +375,27 @@ export const DockNG = GObject.registerClass({
     blockAutoHide(block) {
         this._blockAutoHide = block;
 
-        const shouldShow = !Main.overview.visible;
-        const isHovered = this._dashContainer.get_hover();
+        const shouldShow = this._blockAutoHide && !Main.overview.visible;
 
-        if (isHovered || (block && shouldShow))
+        if (shouldShow)
             this.show(true);
-        else
-            this.hide(true);
+        else {
+            if (this._blockAutoHideDelayId)
+                GLib.source_remove(this._blockAutoHideDelayId);
+
+            // when switching window focus while hover dock
+            // it must not hide. Somehow it does so let's add
+            // an idle to try to grab a valide hover value
+            this._blockAutoHideDelayId = GLib.idle_add(GLib.PRIORITY_DEFAULT,
+                () => {
+                    if (!this._dashContainer.get_hover() &&
+                        !this._blockAutoHide && !Main.overview.visible)
+                        this.hide(true);
+
+                    this._blockAutoHideDelayId = 0;
+                    return GLib.SOURCE_REMOVE;
+                });
+        }
 
         this._onHover();
     }
@@ -502,6 +517,10 @@ export const DockNG = GObject.registerClass({
             this._delayEnsureAutoHideId = 0;
         }
 
+        if (this._blockAutoHideDelayId > 0) {
+            GLib.source_remove(this._blockAutoHideDelayId);
+            this._blockAutoHideDelayId = 0;
+        }
 
         this.showAppsButton.disconnectObject(this);
 
