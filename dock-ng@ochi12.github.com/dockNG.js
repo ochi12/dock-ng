@@ -460,8 +460,10 @@ export const DockNG = GObject.registerClass({
     }
 
     show(animate = true, onComplete) {
-        if (this._shown())
+        if (this._shown()) {
+            onComplete?.();
             return;
+        }
 
         super.show();
 
