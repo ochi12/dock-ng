@@ -154,6 +154,7 @@ export const DockNG = GObject.registerClass({
         this._delayEnsureAutoHideId = 0;
         this._delayUpdateDockAreaId = 0;
         this._blockAutoHideDelayId = 0;
+        this._computeTargetBoxDelayId = 0;
         this._menuOpened = false;
         this._targetBox = null;
 
@@ -175,8 +176,9 @@ export const DockNG = GObject.registerClass({
                 this.hide(this._monitorIndex !== Main.layoutManager.primaryIndex);
             },
             'hidden', () => {
-                if (this._blockAutoHide)
-                    this.show(true);
+                this.show(false, () => {
+                    this._computeTargetBox();
+                });
             },
             'hiding', () => {
                 this.hide(false);
@@ -325,20 +327,32 @@ export const DockNG = GObject.registerClass({
         this.set_position(this._workArea.x, targetY);
 
         if (computeTargetBox)
-            this._computeTargetBox(targetY);
+            this._computeTargetBox();
     }
 
-    _computeTargetBox(targetY) {
+    _computeTargetBox() {
         // y constaints are the only important parseInt
         // but we will just include it anyways. could be part of settings?
-        const x = this._workArea.x;
-        const width = this._workArea.x + this._workArea.width;
 
-        const y = targetY;
-        const height = this.height;
+        if (this._computeTargetBoxDelayId)
+            GLib.source_remove(this._computeTargetBoxDelayId);
 
-        this._targetBox = {x, y, width, height};
-        this.emit('target-box-updated');
+        this._computeTargetBoxDelayId = GLib.idle_add(GLib.PRIORITY_DEFAULT,
+            () => {
+                const targetY = this._workArea.y + this._workArea.height - this.height;
+                const x = this._workArea.x;
+                const width = this._workArea.x + this._workArea.width;
+
+                const y = targetY;
+                const height = this.height;
+
+                this._targetBox = {x, y, width, height};
+                this.emit('target-box-updated');
+
+                this._computeTargetBoxDelayId = 0;
+
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
     // override original _itemMenuStateChanged
@@ -377,9 +391,9 @@ export const DockNG = GObject.registerClass({
 
         const shouldShow = this._blockAutoHide && !Main.overview.visible;
 
-        if (shouldShow)
+        if (shouldShow) {
             this.show(true);
-        else {
+        } else {
             if (this._blockAutoHideDelayId)
                 GLib.source_remove(this._blockAutoHideDelayId);
 
@@ -445,9 +459,11 @@ export const DockNG = GObject.registerClass({
         return [true, 0];
     }
 
-    show(animate = true) {
-        if (this._shown())
+    show(animate = true, onComplete) {
+        if (this._shown()) {
+            onComplete?.();
             return;
+        }
 
         super.show();
 
@@ -462,6 +478,8 @@ export const DockNG = GObject.registerClass({
             this.translation_y = 0;
             this.opacity = 255;
             this.set_scale(1, 1);
+
+            onComplete?.();
             return;
         }
 
@@ -471,6 +489,9 @@ export const DockNG = GObject.registerClass({
             scale_y: 1,
             duration: DOCK_VISIBILITY_ANIMATION_TIME,
             mode: Clutter.AnimationMode.EASE_IN_CUBIC,
+            onComplete: () => {
+                onComplete?.();
+            },
         });
 
         this.ease_property('translation-y', 0, {
@@ -533,6 +554,11 @@ export const DockNG = GObject.registerClass({
         if (this._blockAutoHideDelayId > 0) {
             GLib.source_remove(this._blockAutoHideDelayId);
             this._blockAutoHideDelayId = 0;
+        }
+
+        if (this._computeTargetBoxDelayId > 0) {
+            GLib.source_remove(this._computeTargetBoxDelayId);
+            this._computeTargetBoxDelayId = 0;
         }
 
         this.showAppsButton.disconnectObject(this);
