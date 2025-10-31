@@ -181,7 +181,7 @@ export const DockNG = GObject.registerClass({
                 });
             },
             'hiding', () => {
-                this.hide(false);
+                this.show(false);
             },
             'item-drag-begin', () => {
                 this._draggingItem = true;
@@ -451,10 +451,11 @@ export const DockNG = GObject.registerClass({
     }
 
     _isValidY() {
-        if (this.y + this.height < this._workArea.y + this._workArea.height)
-            return [false, (this._workArea.y + this._workArea.height) - (this.y + this.height)];
-        else if (this.y + this.height > this._workArea.y + this._workArea.height)
-            return [false, -(-this._workArea.y + this._workArea.height) + (this.y + this.height)];
+        const dockBottom = this.y + this.height;
+        const workAreaBottom = this._workArea.y + this._workArea.height;
+
+        if (dockBottom !== workAreaBottom)
+            return [false, workAreaBottom - dockBottom];
 
         return [true, 0];
     }
