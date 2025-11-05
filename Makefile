@@ -1,7 +1,7 @@
 PACK_PATH = "dock-ng@ochi12.github.com.zip"
 EXTENSION_DIR = "dock-ng@ochi12.github.com"
 
-EXTRAS = dockNG.js dockManager.js
+EXTRAS = dockNG.js dockManager.js utils
 
 all: build install
 
