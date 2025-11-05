@@ -212,13 +212,16 @@ export const DockNG = GObject.registerClass({
 
         const bgColor = themeNode.get_background_color();
 
-        this._background.set_style(`
-            border-width:
-            1px; border-color: st-${isDarkColor(bgColor) ? 'lighten' : 'darken'}(
+        const border = `
+            border-width: 1px;
+            border-color: st-${isDarkColor(bgColor) ? 'lighten' : 'darken'}(
                 rgba(${bgColor.red},${bgColor.green},${bgColor.blue},${bgColor.alpha}),
                 15%
             );
-        `);
+        `;
+
+        this._background.set_style(border);
+        Main.overview.dash._background.set_style(border);
 
         this._updateDockArea(true);
     }
@@ -587,6 +590,7 @@ export const DockNG = GObject.registerClass({
 
         this._themeContext.disconnectObject(this);
         this._themeContext = null;
+        Main.overview.dash._background.set_style(null); // restore default style for dash
 
         this.showAppsButton.disconnectObject(this);
 

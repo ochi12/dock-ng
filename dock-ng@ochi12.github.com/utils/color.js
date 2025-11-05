@@ -1,5 +1,3 @@
-import Cogl from 'gi://Cogl';
-
 /**
  * Determine if a color is considered dark using relative luminance.
  * Based on WCAG definition: https://www.w3.org/WAI/GL/wiki/Relative_luminance
