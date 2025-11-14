@@ -36,11 +36,14 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Clutter from 'gi://Clutter';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
 import Meta from 'gi://Meta';
 
 import * as Dash from 'resource:///org/gnome/shell/ui/dash.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Layout from 'resource:///org/gnome/shell/ui/layout.js';
+
+import {isDarkColor} from './utils/color.js';
 
 const DOCK_MAX_HEIGHT_RATIO = 0.16;
 const DOCK_AUTOHIDE_TIMEOUT = 500; // ms
@@ -136,7 +139,6 @@ export const DockNGHotArea = GObject.registerClass({
     }
 });
 
-
 export const DockNG = GObject.registerClass({
     Signals: {
         'target-box-updated': {},
@@ -159,6 +161,10 @@ export const DockNG = GObject.registerClass({
         this._targetBox = null;
 
         this._blockAutoHide = false;
+
+        this._themeContext = St.ThemeContext.get_for_stage(global.stage);
+        this._themeContext.connectObject('changed', this._onThemeChanged.bind(this), this);
+        this._onThemeChanged();
 
         // let actual dash handle toggle mode
         // since the only purpose of dock!ng's showAppsButton is to open app grid
@@ -198,6 +204,26 @@ export const DockNG = GObject.registerClass({
             this._onHover.bind(this), this);
 
         this._updateDockArea();
+    }
+
+    _onThemeChanged() {
+        const targetWidget = this._background;
+        const themeNode = targetWidget.get_theme_node();
+
+        const bgColor = themeNode.get_background_color();
+
+        const border = `
+            border-width: 1px;
+            border-color: st-${isDarkColor(bgColor) ? 'lighten' : 'darken'}(
+                rgba(${bgColor.red},${bgColor.green},${bgColor.blue},${bgColor.alpha}),
+                15%
+            );
+        `;
+
+        this._background.set_style(border);
+        Main.overview.dash._background.set_style(border);
+
+        this._updateDockArea(true);
     }
 
     // override original _redisplay
@@ -561,6 +587,10 @@ export const DockNG = GObject.registerClass({
             GLib.source_remove(this._computeTargetBoxDelayId);
             this._computeTargetBoxDelayId = 0;
         }
+
+        this._themeContext.disconnectObject(this);
+        this._themeContext = null;
+        Main.overview.dash._background.set_style(null); // restore default style for dash
 
         this.showAppsButton.disconnectObject(this);
 
