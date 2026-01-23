@@ -45,6 +45,7 @@ const OverlapStatus = {
 // List of windows type taken into account.
 // Order is important (keep the original enum order).
 const handledWindowTypes = [
+    // Window types that trigger intellihide for both state
     Meta.WindowType.NORMAL,
     Meta.WindowType.DOCK,
     Meta.WindowType.DIALOG,
@@ -53,6 +54,14 @@ const handledWindowTypes = [
     Meta.WindowType.MENU,
     Meta.WindowType.UTILITY,
     Meta.WindowType.SPLASHSCREEN,
+
+    // Window types that only triggers the hide state for intellihide.
+    // an element like adwaita popup menu don't need to tell the dock to appear
+    // if it is not overlaping the dock but when it does, it must trigger hide state
+    // or else users wont be able to interact with the rest of the menu
+    Meta.WindowType.DROPDOWN_MENU,
+    Meta.WindowType.POPUP_MENU,
+    Meta.WindowType.COMBO,
 ];
 
 
@@ -67,6 +76,9 @@ class Intellihide {
         this._targetBox = null;
 
         this._tracker = Shell.WindowTracker.get_default();
+
+        this._forHideOnlyBaseType = Meta.WindowType.DROPDOWN_MENU;
+        this._hideOnly = false;
 
         global.display.connectObject(
             'window-entered-monitor', this._onCheckOverlap.bind(this),
@@ -84,6 +96,10 @@ class Intellihide {
 
         Main.keyboard.connectObject('visibility-changed',
             this._onKeyboardVisibilityChanged.bind(this), this);
+    }
+
+    _forHideOnly(win) {
+        return handledWindowTypes.indexOf(win.get_window_type()) >= handledWindowTypes.indexOf(this._forHideOnlyBaseType);
     }
 
     _onCheckOverlap() {
@@ -133,7 +149,9 @@ class Intellihide {
             return;
         }
 
-        const overlap = (winBox, targetBox) => this._test(winBox, targetBox);
+        const overlap = (winBox, targetBox) => this._test(winBox, targetBox) || this._forHideOnly(focusWin);
+
+        console.log(focusWin.get_window_type());
 
         const winBox = focusWin.get_frame_rect();
         this._applyOverlapStatus(overlap(winBox, this._targetBox), true);
@@ -167,8 +185,7 @@ class Intellihide {
         if (windows.length === 0)
             this._applyOverlapStatus(false, true);
 
-        const overlap = windows.some(win =>
-            win && this._test(win.get_frame_rect(), this._targetBox));
+        const overlap = windows.some(win => win && this._test(win.get_frame_rect(), this._targetBox) || this._forHideOnly(win));
 
         this._applyOverlapStatus(overlap);
     }
@@ -187,10 +204,6 @@ class Intellihide {
     }
 
     _isHandledWindow(win) {
-        // FIXME: We need to specific window types
-        // not all handledWindowTypes are always valid
-        // somethimes we need to ignore specific one.
-
         return handledWindowTypes.includes(win.get_window_type());
     }
 
