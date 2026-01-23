@@ -202,12 +202,12 @@ class Intellihide {
     }
 
     _onKeyboardVisibilityChanged() {
-        if (Main.keyboard.visible) {
+        if (Main.keyboard.visible)
             this._applyOverlapStatus(true, true);
-        } else {
+        else
             this._applyOverlapStatus(false, true);
-            this._onCheckOverlap();
-        }
+
+        this._onCheckOverlap();
     }
 
     get status() {
