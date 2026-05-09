@@ -2,10 +2,10 @@
   "name": "Dock!ng",
   "description": "A lightweight non-fixed dock support for GNOME Shell using the native dash with simple but adaptive intellihide",
   "uuid": "dock-ng@ochi12.github.com",
-  "version": 8,
-  "version-name": "v1.1.2",
+  "version": 9,
+  "version-name": "v1.2.0",
   "shell-version": [
-    "45", "46", "47", "48", "49"
+    "45", "46", "47", "48", "49", "50"
   ],
   "url": "https://github.com/ochi12/dock-ng/",
   "donations": {
